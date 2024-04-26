@@ -246,8 +246,10 @@ const getUsersBoosters=async ()=>{
     console.log("--- END GetUserBoosters ---");
 };
 
-const addBoostersToUsers = async ()=>{
-    console.log("--- BEGIN addBoostersToUsers ---");
+const addFreeBoostersToUsers = async ()=>{
+    console.log("--- BEGIN addBoostersToSOMEUsers ---");
+    //se someUsers è un array vuoto viene applicato il free boosters a tutti, se no a quelli in array
+    const someUsers:String[] = ["andrea@intraverse.io"];
 
     try {
         // Retrieve all users
@@ -256,7 +258,7 @@ const addBoostersToUsers = async ()=>{
         // Loop through each user document
         usersSnapshot.forEach(async (doc) => {
             const email = doc.data().email;
-            //if(email=="andrea@intraverse.io"){
+            if(someUsers.length === 0 || someUsers.includes(email)){
                 const userData = doc.data();
             
                 // Check if boosters array exists, if not, create it
@@ -269,7 +271,7 @@ const addBoostersToUsers = async ()=>{
                     {
                     BoosterDuration: 15,
                     BoosterValue: 4,
-                    CreationDate: new Date(),
+                    CreationDate: Timestamp.fromDate(new Date),
                     Id: generateRandomString(20),
                     Name: "15 MIN",
                     ProductId: "Jc6g1DPZNFuZpYSmjDgh",
@@ -280,7 +282,7 @@ const addBoostersToUsers = async ()=>{
                     {
                     BoosterDuration: 30,
                     BoosterValue: 4,
-                    CreationDate: new Date(),
+                    CreationDate: Timestamp.fromDate(new Date),
                     Id: generateRandomString(20),
                     Name: "30 MIN",
                     ProductId: "T72lwXCQklznIpwU8UBs",
@@ -291,7 +293,7 @@ const addBoostersToUsers = async ()=>{
                     {
                     BoosterDuration: 60,
                     BoosterValue: 4,
-                    CreationDate: new Date(),
+                    CreationDate: Timestamp.fromDate(new Date),
                     Id: generateRandomString(20),
                     Name: "60 MIN",
                     ProductId: "fWdHX4CboXJsVvbnmTfB",
@@ -302,7 +304,7 @@ const addBoostersToUsers = async ()=>{
                     {
                     BoosterDuration: 120,
                     BoosterValue: 4,
-                    CreationDate: new Date(),
+                    CreationDate: Timestamp.fromDate(new Date),
                     Id: generateRandomString(20),
                     Name: "120 MIN",
                     ProductId: "buMXvm9HJhXKKUTxfYgJ",
@@ -318,14 +320,14 @@ const addBoostersToUsers = async ()=>{
                 // Update user document with modified boosters array
                 await db.collection('users').doc(doc.id).set(userData);
                 //console.log("finalBoosters: ", boostersToAdd)
-            //}
+            }
         });
     
         console.log("Boosters updated successfully.");
       } catch (error) {
         console.error("Error updating boosters:", error);
       }
-      console.log("--- END addBoostersToUsers ---");
+      console.log("--- END addBoostersToSOMEUsers ---");
 }
 
 // Function to generate a random unique string
@@ -376,8 +378,8 @@ const deleteFreeBoosters = async ()=>{
     try {
         //await clearUserWallets();
         //await getUsersBoosters();
-        //await addBoostersToUsers();
-        await deleteFreeBoosters();
+        await addFreeBoostersToUsers();
+        //await deleteFreeBoosters();
         console.log('--- END runner ---');
     } catch (e) {
         console.log("Errore nell'esecuzione del runner: ", e);
