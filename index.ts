@@ -247,7 +247,7 @@ const getUsersBoosters=async ()=>{
 };
 
 const addFreeBoostersToUsers = async ()=>{
-    console.log("--- BEGIN addBoostersToSOMEUsers ---");
+    console.log("--- BEGIN addFreeBoostersToUsers ---");
     //se someUsers è un array vuoto viene applicato il free boosters a tutti, se no a quelli in array
     const someUsers:String[] = ["andrea@intraverse.io"];
 
@@ -327,7 +327,7 @@ const addFreeBoostersToUsers = async ()=>{
       } catch (error) {
         console.error("Error updating boosters:", error);
       }
-      console.log("--- END addBoostersToSOMEUsers ---");
+      console.log("--- END addFreeBoostersToUsers ---");
 }
 
 // Function to generate a random unique string
