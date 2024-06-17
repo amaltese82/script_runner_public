@@ -1,6 +1,10 @@
 import firebase from 'firebase-admin';
 import { Firestore, Timestamp, FieldValue } from '@google-cloud/firestore';
 import { v4 as uuidv4 } from 'uuid';
+import * as path from 'path';
+import * as filesys from 'fs';
+
+
 const fs = require('fs').promises; 
 console.log('START SCRIPT');
 
@@ -15,6 +19,26 @@ const db = firebase.firestore();
 type TypeRoom = "Versus_PVP" | "Versus_PVE" | null;
 
 const _GameRoom="GameRoom";
+
+
+interface DocumentExport {
+    id: string;
+    data: FirebaseFirestore.DocumentData;
+}
+
+interface ExportData {
+    [collectionName: string]: DocumentExport[] | null;
+}
+
+interface Interval {
+    startDate: string;
+    endDate: string;
+}
+
+interface Round {
+    roundName: string;
+    endDate: Date;
+}
 
 interface Booster {
     Status?: string,
@@ -371,6 +395,173 @@ const deleteFreeBoosters = async ()=>{
     console.log("--- END deleteFreeBoosters ---");
 }
 
+async function getRecentAndPreviousRoundEndDates() {
+    try {
+      const tournamentDocRef = db.collection('tournaments').doc('tournament2023');
+      const roundsRef = tournamentDocRef.collection('rounds');
+      const roundsSnapshot = await roundsRef.get();
+  
+      if (roundsSnapshot.empty) {
+        console.log('No rounds found.');
+        return;
+      }
+  
+      const rounds: Round[] = roundsSnapshot.docs.map(doc => {
+        const data = doc.data();
+        const intervals: Interval[] = data.intervals;
+  
+        if (!intervals || intervals.length === 0) {
+          return null; // Ignore rounds with no intervals
+        }
+  
+        const endDate = intervals.reduce((maxDate: Date, interval: Interval) => {
+          const end = new Date(interval.endDate);
+          return end > maxDate ? end : maxDate;
+        }, new Date('0000-01-01T00:00:00.000Z'));
+  
+        return {
+          roundName: data.roundName,
+          endDate: endDate
+        };
+      }).filter(round => round !== null) as Round[]; // Filter out null values
+  
+      // Sort rounds by their endDate in descending order
+      rounds.sort((a, b) => b.endDate.getTime() - a.endDate.getTime());
+  
+      const recentRound = rounds[0];
+      const previousRound = rounds[1];
+  
+      if (recentRound) {
+        console.log('Most Recent Round End Date:', recentRound.endDate);
+        console.log('Most Recent Round Name:', recentRound.roundName);
+      } else {
+        console.log('No valid rounds found.');
+      }
+  
+      if (previousRound) {
+        console.log('Previous Round End Date:', previousRound.endDate);
+        console.log('Previous Round Name:', previousRound.roundName);
+      } else {
+        console.log('No previous round found.');
+      }
+    } catch (error) {
+      console.error('Error fetching rounds:', error);
+    }
+}
+
+async function getTotalAmountBetweenDates(from: string | null, to: string): Promise<number> {
+    try {
+      const toDate = new Date(to);
+      const purchasesRef = db.collection('purchases');
+      let purchasesQuery;
+  
+      if (from) {
+        const fromDate = new Date(from);
+        purchasesQuery = purchasesRef
+          .where('creation_at', '>=', fromDate)
+          .where('creation_at', '<=', toDate);
+      } else {
+        purchasesQuery = purchasesRef
+          .where('creation_at', '<=', toDate);
+      }
+  
+      const purchasesSnapshot = await purchasesQuery.get();
+  
+      if (purchasesSnapshot.empty) {
+        console.log('No purchases found within the given date range.');
+        return 0;
+      }
+  
+      const totalAmount = purchasesSnapshot.docs.reduce((sum, doc) => {
+        const data = doc.data();
+        return sum + (data.totalAmount || 0);
+      }, 0);
+  
+      console.log(`Total Amount between ${from ? from : 'beginning'} and ${to}:`, totalAmount);
+      return totalAmount;
+    } catch (error) {
+      console.error('Error fetching purchases:', error);
+      throw error;
+    }
+  }
+  
+  async function exportDocsFromEachCollection(percent: number) {
+    if (percent <= 0 || percent > 100) {
+      throw new Error('Percent must be a number between 0 and 100');
+    }
+  
+    try {
+      const collections = await db.listCollections();
+      const exportData: ExportData = {};
+  
+      for (const collection of collections) {
+        const collectionName = collection.id;
+        const totalDocsSnapshot = await collection.get();
+        const totalDocs = totalDocsSnapshot.size;
+        const docCount = Math.ceil(totalDocs * (percent / 100));
+  
+        if (totalDocs > 0) {
+          const documentsSnapshot = await collection.limit(docCount).get();
+          exportData[collectionName] = documentsSnapshot.docs.map(doc => ({
+            id: doc.id,
+            data: doc.data()
+          }));
+        } else {
+          exportData[collectionName] = null;
+        }
+      }
+  
+      console.log('Exported data:', JSON.stringify(exportData, null, 2));
+    } catch (error) {
+      console.error('Error exporting collections:', error);
+    }
+  }
+  
+  async function importDataFromFile(filePath: string) {
+    try {
+      const fileContent = filesys.readFileSync(filePath, 'utf8');
+      const exportData: ExportData = JSON.parse(fileContent);
+  
+      for (const collectionName in exportData) {
+        const documents = exportData[collectionName];
+        if (documents) {
+          for (const doc of documents) {
+            await db.collection(collectionName).doc(doc.id).set(doc.data);
+          }
+        }
+      }
+  
+      console.log('Data import completed successfully.');
+    } catch (error) {
+      console.error('Error importing data:', error);
+    }
+  }
+
+  async function getPurchasesWithinDateRange(from:String, to:String) {
+    try {
+      // Converte le date in oggetti Timestamp di Firestore
+      const fromTimestamp = Timestamp.fromDate(new Date(from+''));
+      const toTimestamp = Timestamp.fromDate(new Date(to+''));
+  
+      // Esegue la query
+      const snapshot = await db.collection('purchases')
+        .where('creation_at', '>=', fromTimestamp)
+        .where('creation_at', '<=', toTimestamp)
+        .get();
+  
+      if (snapshot.empty) {
+        console.log('No matching documents.');
+        return;
+      }
+  
+      // Estrae e stampa i dati dei documenti
+      snapshot.forEach(doc => {
+        console.log(doc.id, '=>', doc.data());
+      });
+    } catch (error) {
+      console.error('Error getting documents: ', error);
+    }
+  }
 
 
 (async function () {
@@ -378,8 +569,27 @@ const deleteFreeBoosters = async ()=>{
     try {
         //await clearUserWallets();
         //await getUsersBoosters();
-        await addFreeBoostersToUsers();
+        //await addFreeBoostersToUsers();
         //await deleteFreeBoosters();
+        //await getRecentAndPreviousRoundEndDates();
+
+        //get total revenue between dates
+        // const from = '2024-04-20T02:15:00';
+        // const to = '2024-12-31T23:59:59';
+        // getTotalAmountBetweenDates(from, to);
+
+        //const exportPercent = 3; 
+        //exportDocsFromEachCollection(exportPercent);
+
+        // Specifica il percorso del file JSON qui
+        // const jsonFilePath = '/Users/andreamaltese/Documents/lavori/INTRAVERSE/metatope/export-dev.json';
+        // importDataFromFile(jsonFilePath);
+
+        // const from = '2024-05-21T00:00:00Z'; // Data di inizio (ISO 8601)
+        // const to = '2024-05-30T23:59:59Z';   // Data di fine (ISO 8601)
+        // getPurchasesWithinDateRange(from, to);
+
+
         console.log('--- END runner ---');
     } catch (e) {
         console.log("Errore nell'esecuzione del runner: ", e);
